@@ -32,7 +32,7 @@ class ClonerService
     public function __construct(SymfonyStyle $symfonyStyle, string $url)
     {
         $this->data = [];
-        $this->link = [];
+        $this->link = ['old' => [], 'new' => []];
         $this->url = $url;
         $this->io = $symfonyStyle;
         echo preg_replace("/[^:]*:\/\//", '', $this->url);
@@ -50,7 +50,8 @@ class ClonerService
 
         $this->crawler = $this->request($this->url, true);
         $this->readAttr();
-        $this->readLink();
+        $this->getPage();
+        print_r($this->readLink());
         $this->close();
     }
 
@@ -109,7 +110,7 @@ class ClonerService
                     } else if (preg_match("/^\/\/\w/", $elem)) {
                         $this->data[$key][$num][array_search($elem, $this->data[$key][$num])] = "https:" . $elem;
                     } else if (preg_match("/^\/\w/", $elem)) {
-                        $this->data[$key][$num][array_search($elem, $this->data[$key][$num])] = $this->url . "\file" . $elem;
+                        $this->data[$key][$num][array_search($elem, $this->data[$key][$num])] = $this->url . $elem;
                     } else {
                         $this->data[$key][$num][array_search($elem, $this->data[$key][$num])] = trim($elem);
                     }
@@ -126,12 +127,13 @@ class ClonerService
         $failed = [];
         
         foreach ($data as $elem) {
-            $this->getPage();
+            echo "Resolving " . $elem . PHP_EOL . PHP_EOL;
             if (preg_match("/^\/\w/", $elem)) {
                 // array_push($this->link, $this->url.$elem);
                 try {
                     $this->request($this->url . $elem, true);
                     $this->readAttr();
+                    $this->getPage($elem);
                 } catch (\Throwable $th) {
                     array_push($failed, $th->getMessage());
                     echo $th->getMessage() . PHP_EOL;
@@ -164,6 +166,7 @@ class ClonerService
         }
         echo "Url sorted" . PHP_EOL;
         print_r($this->getFiles($local['file']));
+        print_r($this->getUrl($local['url']));
         print_r($this->getFiles($external['file'], true));
         print_r($this->getUrl($external['url']));
     }
@@ -186,6 +189,8 @@ class ClonerService
                     if (preg_match("/^\<html/", $data)) {
                         throw new Exception('Resource not available');
                     }
+                    array_push($this->link['old'], $url);
+                    array_push($this->link['new'], Path::canonicalize(".\public\local/" . $file));
                     $this->fs->dumpFile(Path::canonicalize(".\public\local/" . $file), $data);
                     // echo $url." resolved".PHP_EOL; echo PHP_EOL;
                 } catch (\Throwable $th) {
@@ -206,7 +211,8 @@ class ClonerService
                         throw new Exception('Resource not available');
                     } else if (str_contains($data, $short_url)) {
                         // echo "Attempting ".$url.PHP_EOL;
-                        array_push($this->link, $file);
+                        array_push($this->link['old'], $url);
+                        array_push($this->link['new'], Path::canonicalize(".\public\seed/" . $file));
                         $this->fs->dumpFile(Path::canonicalize(".\public\seed/" . $file), $data);
                         // echo $url . " resolved".PHP_EOL; echo PHP_EOL;
                     }
@@ -231,7 +237,9 @@ class ClonerService
                     throw new Exception('Resource already exists');
                 }
                 $data = $this->httpRequest($url)->getContent();
-                if (str_contains($data, $short_url)) {
+                if (str_contains($data, $short_url) || str_contains($url, $short_url)) { // string contain short url
+                    array_push($this->link['old'], $url);
+                    array_push($this->link['new'], Path::canonicalize(".\public\seed/" . $file));
                     $this->fs->dumpFile(Path::canonicalize(".\public\seed/" . $file), $data);
                 }
 
@@ -242,18 +250,14 @@ class ClonerService
         return $failed;
     }
 
-    protected function getPage(?string $file = null): void
+    protected function getPage(?string $file = null): void 
     {
         $short_url = preg_filter("/\..*/", '', preg_filter("/(.*\/\/)/", '', $this->url));
         $v = $this->crawler->html();
-        $v = str_replace($this->url, Path::canonicalize(".\public\local/" . $short_url), $v);
-        foreach ($this->link as $link) {
-            $v = str_replace($link, Path::canonicalize(".\public\seed/" . $link), $v);
-        }
-        $fileHandler = $file . '.htm' ?: 'index.htm';
-        $this->fs->dumpFile(Path::canonicalize(".\public/" . $fileHandler), $v);
-        $this->data = [];
-        $this->link = [];
+        $v = str_replace($this->link['old'], $this->link['new'], $v);
+        $fileHandler = $file  ?: 'index';
+        $this->fs->dumpFile(Path::canonicalize(".\public/page/" . $fileHandler.'.htm'), $v);
+        $this->data = []; $this->link['new'] = []; $this->link['old'] = [];
     }
 
     protected function close(): void
@@ -265,7 +269,7 @@ class ClonerService
 
     protected function nodeAttr(string $tag, string $attr, string $doc): array
     {
-        echo "Fetching attributes for " . $tag . PHP_EOL;
+        // echo "Fetching attributes for " . $tag . PHP_EOL;
         $pattern = "/\<" . $tag . "\s[^>]*\s" . $attr . "\s*\=\s*[^>]*>/";
         preg_match_all($pattern, $doc, $nodes, PREG_PATTERN_ORDER);
         $pattern1 = ["/\<" . $tag . "\s.*\s" . $attr . "\s*\=\s*\"/", "/\"[^>]*>/"];
@@ -275,13 +279,14 @@ class ClonerService
             if (preg_match($pattern1[0], $node)) {
                 $n = preg_replace($pattern1[0], '', $node);
                 $m = preg_replace($pattern1[1], '', $n);
-                array_push($data, trim($m));
+                array_push($data, trim($m, ". \n\r\t\v\x00"));
             } else if (preg_match($pattern2[0], $node)) {
                 $n = preg_replace($pattern2[0], '', $node);
                 $m = preg_replace($pattern2[1], '', $n);
-                array_push($data, trim($m));
+                array_push($data, trim($m, ". \n\r\t\v\x00"));
             }
         }
+        print_r($data);
         return $data;
     }
 }

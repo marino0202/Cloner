@@ -8,6 +8,7 @@
 /public/local/
 /public/seed/
 /public/assets/
+/public/*.htm
 /var/
 /vendor/
 ###< symfony/framework-bundle ###

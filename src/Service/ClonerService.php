@@ -127,7 +127,6 @@ class ClonerService
         $failed = [];
         
         foreach ($data as $elem) {
-            echo "Resolving " . $elem . PHP_EOL . PHP_EOL;
             if (preg_match("/^\/\w/", $elem)) {
                 // array_push($this->link, $this->url.$elem);
                 try {
@@ -252,11 +251,11 @@ class ClonerService
 
     protected function getPage(?string $file = null): void 
     {
-        $short_url = preg_filter("/\..*/", '', preg_filter("/(.*\/\/)/", '', $this->url));
         $v = $this->crawler->html();
         $v = str_replace($this->link['old'], $this->link['new'], $v);
         $fileHandler = $file  ?: 'index';
-        $this->fs->dumpFile(Path::canonicalize(".\public/page/" . $fileHandler.'.htm'), $v);
+        $this->fs->dumpFile(Path::canonicalize(".\public/" . $fileHandler.'.htm'), $v);
+        echo "Resolving " . $fileHandler . PHP_EOL . PHP_EOL;
         $this->data = []; $this->link['new'] = []; $this->link['old'] = [];
     }
 
@@ -286,7 +285,6 @@ class ClonerService
                 array_push($data, trim($m, ". \n\r\t\v\x00"));
             }
         }
-        print_r($data);
         return $data;
     }
 }

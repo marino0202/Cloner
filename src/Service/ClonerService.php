@@ -65,6 +65,7 @@ class ClonerService
                 $this->client->wait();
             }
         }
+        $this->client->takeScreenshot(Path::canonicalize("screenshot/".preg_replace("/[^\/]+(?=\/)\/+/", '', $url).".png"));
         $crawler = $this->client->getCrawler();
         return $crawler;
     }
@@ -130,7 +131,7 @@ class ClonerService
             if (preg_match("/^\/\w/", $elem)) {
                 // array_push($this->link, $this->url.$elem);
                 try {
-                    $this->request($this->url . $elem, true);
+                    $this->crawler = $this->request($this->url . $elem, true);
                     $this->readAttr();
                     $this->getPage($elem);
                 } catch (\Throwable $th) {
@@ -181,6 +182,7 @@ class ClonerService
                 // echo "Attempting to download ".$url.PHP_EOL;
                 try {
                     $file = preg_filter("/[^\/]+:\/\//", '', preg_replace("/\?.*/", '', $url));
+                    array_push($this->link['old'], $url); array_push($this->link['new'], Path::canonicalize(".\public\local/" . $file));
                     if ($this->fs->exists(Path::canonicalize(".\public\local/".$file))) {
                         throw new Exception('Resource already exists');
                     }
@@ -188,8 +190,6 @@ class ClonerService
                     if (preg_match("/^\<html/", $data)) {
                         throw new Exception('Resource not available');
                     }
-                    array_push($this->link['old'], $url);
-                    array_push($this->link['new'], Path::canonicalize(".\public\local/" . $file));
                     $this->fs->dumpFile(Path::canonicalize(".\public\local/" . $file), $data);
                     // echo $url." resolved".PHP_EOL; echo PHP_EOL;
                 } catch (\Throwable $th) {
@@ -202,6 +202,7 @@ class ClonerService
                 // echo "Checking external ".$url.PHP_EOL;
                 try {
                     $file = preg_filter("/[^\/]+:\/\//", '', preg_replace("/\?.*/", '', $url));
+                    array_push($this->link['old'], $url); array_push($this->link['new'], Path::canonicalize(".\public\seed/" . $file));
                     if ($this->fs->exists(Path::canonicalize(".\public\seed/".$file))) {
                         throw new Exception('Resource already exists');
                     }
@@ -210,8 +211,6 @@ class ClonerService
                         throw new Exception('Resource not available');
                     } else if (str_contains($data, $short_url)) {
                         // echo "Attempting ".$url.PHP_EOL;
-                        array_push($this->link['old'], $url);
-                        array_push($this->link['new'], Path::canonicalize(".\public\seed/" . $file));
                         $this->fs->dumpFile(Path::canonicalize(".\public\seed/" . $file), $data);
                         // echo $url . " resolved".PHP_EOL; echo PHP_EOL;
                     }
@@ -232,13 +231,12 @@ class ClonerService
         foreach ($urls as $url) {
             try {
                 $file = preg_filter("/[^\/]+:\/\//", '', $url) . ".js";
+                array_push($this->link['old'], $url); array_push($this->link['new'], Path::canonicalize(".\public\seed/" . $file));
                 if ($this->fs->exists(Path::canonicalize(".\public\seed/" . $file))) {
                     throw new Exception('Resource already exists');
                 }
                 $data = $this->httpRequest($url)->getContent();
                 if (str_contains($data, $short_url) || str_contains($url, $short_url)) { // string contain short url
-                    array_push($this->link['old'], $url);
-                    array_push($this->link['new'], Path::canonicalize(".\public\seed/" . $file));
                     $this->fs->dumpFile(Path::canonicalize(".\public\seed/" . $file), $data);
                 }
 
